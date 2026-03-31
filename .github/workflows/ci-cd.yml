@@ -1,3 +1,16 @@
+# ================================================================
+#  PIPELINE CI/CD — Sistema de Códigos Sequenciais
+#  Disciplina: Verificação, Validação e Testes (VV&T)
+#
+#  Etapas automatizadas:
+#    1. Provisionar ambiente Linux (Ubuntu)
+#    2. Provisionar MySQL Server (Service Container)
+#    3. Criar banco de dados e tabela via script SQL
+#    4. Instalar Python e dependências
+#    5. Verificar conexão Python ↔ MySQL
+#    6. Executar testes automatizados (pytest)
+# ================================================================
+
 name: "CI/CD — Códigos Sequenciais"
 
 on:
@@ -12,12 +25,28 @@ jobs:
     name: "🔄 Build → MySQL → Testes"
     runs-on: ubuntu-latest
 
+    # ── Variáveis de ambiente ──
     env:
       DB_HOST: "127.0.0.1"
       DB_PORT: "3306"
       DB_USER: "root"
       DB_PASSWORD: "pipeline_password_2025"
       DB_NAME: "produtos_db"
+
+    # ── MySQL provisionado automaticamente ──
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: pipeline_password_2025
+          MYSQL_DATABASE: produtos_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -ppipeline_password_2025"
+          --health-interval=10s
+          --health-timeout=10s
+          --health-retries=5
 
     steps:
       # ════════════════════════════════════════════════
@@ -29,13 +58,15 @@ jobs:
       # ════════════════════════════════════════════════
       # ETAPA 2: Configuração do ambiente Linux
       # ════════════════════════════════════════════════
-      - name: "🐧 Atualizar pacotes do sistema Linux"
+      - name: "🐧 Configurar ambiente Linux e instalar dependências"
         run: |
           echo "══════════════════════════════════════════"
           echo "  ETAPA 2: Configuração do ambiente Linux"
           echo "══════════════════════════════════════════"
           sudo apt-get update -y
-          echo "✅ Sistema atualizado com sucesso"
+          sudo apt-get install -y mysql-client
+          echo ""
+          echo "✅ Sistema atualizado e mysql-client instalado"
           echo ""
           echo "📋 Informações do sistema:"
           lsb_release -a 2>/dev/null || cat /etc/os-release
@@ -43,40 +74,20 @@ jobs:
           uname -r
 
       # ════════════════════════════════════════════════
-      # ETAPA 3: Instalação e configuração do MySQL
+      # ETAPA 3: Verificar MySQL Server em execução
       # ════════════════════════════════════════════════
-      - name: "🗄️ Instalar MySQL Server"
+      - name: "🗄️ Verificar MySQL Server provisionado"
         run: |
           echo "══════════════════════════════════════════"
-          echo "  ETAPA 3a: Instalação do MySQL Server"
+          echo "  ETAPA 3: Verificação do MySQL Server"
           echo "══════════════════════════════════════════"
-          sudo apt-get install -y mysql-server mysql-client
-          echo "✅ MySQL instalado"
-
-      - name: "⚙️ Iniciar e configurar MySQL"
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  ETAPA 3b: Iniciar serviço MySQL"
-          echo "══════════════════════════════════════════"
-          sudo systemctl start mysql
-          sudo systemctl enable mysql
-          sudo systemctl status mysql --no-pager
-          echo ""
-          echo "✅ MySQL em execução"
-
-      - name: "🔐 Configurar usuário e senha MySQL"
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  ETAPA 3c: Configurar credenciais MySQL"
-          echo "══════════════════════════════════════════"
-          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';"
-          sudo mysql -e "CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';"
-          sudo mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;"
-          sudo mysql -e "FLUSH PRIVILEGES;"
-          echo "✅ Credenciais configuradas"
-          echo ""
           echo "📌 Versão do MySQL:"
-          mysql -u root -p"${DB_PASSWORD}" -e "SELECT VERSION() AS versao_mysql;"
+          mysql -h 127.0.0.1 -u root -p"${DB_PASSWORD}" -e "SELECT VERSION() AS versao_mysql;"
+          echo ""
+          echo "📌 Bancos de dados disponíveis:"
+          mysql -h 127.0.0.1 -u root -p"${DB_PASSWORD}" -e "SHOW DATABASES;"
+          echo ""
+          echo "✅ MySQL Server em execução e acessível"
 
       # ════════════════════════════════════════════════
       # ETAPA 4: Criar banco de dados e tabela
@@ -86,17 +97,17 @@ jobs:
           echo "══════════════════════════════════════════"
           echo "  ETAPA 4: Criação do banco e tabela"
           echo "══════════════════════════════════════════"
-          mysql -u root -p"${DB_PASSWORD}" < schema.sql
+          mysql -h 127.0.0.1 -u root -p"${DB_PASSWORD}" < schema.sql
           echo "✅ Script SQL executado com sucesso"
           echo ""
           echo "📌 Tabelas criadas:"
-          mysql -u root -p"${DB_PASSWORD}" -e "USE ${DB_NAME}; SHOW TABLES;"
+          mysql -h 127.0.0.1 -u root -p"${DB_PASSWORD}" -e "USE ${DB_NAME}; SHOW TABLES;"
           echo ""
           echo "📌 Estrutura da tabela codigos_sequenciais:"
-          mysql -u root -p"${DB_PASSWORD}" -e "USE ${DB_NAME}; DESCRIBE codigos_sequenciais;"
+          mysql -h 127.0.0.1 -u root -p"${DB_PASSWORD}" -e "USE ${DB_NAME}; DESCRIBE codigos_sequenciais;"
           echo ""
           echo "📌 Dados de referência inseridos:"
-          mysql -u root -p"${DB_PASSWORD}" -e "USE ${DB_NAME}; SELECT * FROM codigos_sequenciais;"
+          mysql -h 127.0.0.1 -u root -p"${DB_PASSWORD}" -e "USE ${DB_NAME}; SELECT * FROM codigos_sequenciais;"
 
       # ════════════════════════════════════════════════
       # ETAPA 5: Configurar ambiente Python
