@@ -1,0 +1,202 @@
+# ================================================================
+#  PIPELINE CI/CD — Sistema de Códigos Sequenciais
+#  Disciplina: Verificação, Validação e Testes (VV&T)
+#
+#  Etapas automatizadas:
+#    1. Provisionar ambiente Linux (Ubuntu)
+#    2. Instalar e configurar MySQL Server
+#    3. Criar banco de dados e tabela via script SQL
+#    4. Instalar Python e dependências
+#    5. Verificar conexão Python ↔ MySQL
+#    6. Executar testes automatizados (pytest)
+# ================================================================
+
+name: "CI/CD — Códigos Sequenciais"
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:          # permite execução manual
+
+jobs:
+  pipeline-completa:
+    name: "🔄 Build → MySQL → Testes"
+    runs-on: ubuntu-latest    # Ambiente Linux Ubuntu
+
+    # ── Variáveis de ambiente para toda a pipeline ──
+    env:
+      DB_HOST: "127.0.0.1"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASSWORD: "pipeline_password_2025"
+      DB_NAME: "produtos_db"
+
+    steps:
+      # ════════════════════════════════════════════════
+      # ETAPA 1: Checkout do código-fonte
+      # ════════════════════════════════════════════════
+      - name: "📥 Checkout do repositório"
+        uses: actions/checkout@v4
+
+      # ════════════════════════════════════════════════
+      # ETAPA 2: Configuração do ambiente Linux
+      # ════════════════════════════════════════════════
+      - name: "🐧 Atualizar pacotes do sistema Linux"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 2: Configuração do ambiente Linux"
+          echo "══════════════════════════════════════════"
+          sudo apt-get update -y
+          echo "✅ Sistema atualizado com sucesso"
+          echo ""
+          echo "📋 Informações do sistema:"
+          lsb_release -a 2>/dev/null || cat /etc/os-release
+          echo ""
+          uname -r
+
+      # ════════════════════════════════════════════════
+      # ETAPA 3: Instalação e configuração do MySQL
+      # ════════════════════════════════════════════════
+      - name: "🗄️ Instalar MySQL Server"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 3a: Instalação do MySQL Server"
+          echo "══════════════════════════════════════════"
+          sudo apt-get install -y mysql-server mysql-client
+          echo "✅ MySQL instalado"
+
+      - name: "⚙️ Iniciar e configurar MySQL"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 3b: Iniciar serviço MySQL"
+          echo "══════════════════════════════════════════"
+          sudo systemctl start mysql
+          sudo systemctl enable mysql
+          sudo systemctl status mysql --no-pager
+          echo ""
+          echo "✅ MySQL em execução"
+
+      - name: "🔐 Configurar usuário e senha MySQL"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 3c: Configurar credenciais MySQL"
+          echo "══════════════════════════════════════════"
+          sudo mysql << EOF
+          ALTER USER 'root'@'localhost'
+            IDENTIFIED WITH mysql_native_password
+            BY '${DB_PASSWORD}';
+          CREATE USER IF NOT EXISTS 'root'@'127.0.0.1'
+            IDENTIFIED WITH mysql_native_password
+            BY '${DB_PASSWORD}';
+          GRANT ALL PRIVILEGES ON *.*
+            TO 'root'@'127.0.0.1'
+            WITH GRANT OPTION;
+          FLUSH PRIVILEGES;
+          EOF
+          echo "✅ Credenciais configuradas"
+          echo ""
+          echo "📌 Versão do MySQL:"
+          mysql -u root -p${DB_PASSWORD} -e "SELECT VERSION() AS versao_mysql;"
+
+      # ════════════════════════════════════════════════
+      # ETAPA 4: Criar banco de dados e tabela
+      # ════════════════════════════════════════════════
+      - name: "📋 Executar script SQL (criar banco e tabela)"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 4: Criação do banco e tabela"
+          echo "══════════════════════════════════════════"
+          mysql -u root -p${DB_PASSWORD} < schema.sql
+          echo "✅ Script SQL executado com sucesso"
+          echo ""
+          echo "📌 Tabelas criadas:"
+          mysql -u root -p${DB_PASSWORD} -e "USE ${DB_NAME}; SHOW TABLES;"
+          echo ""
+          echo "📌 Estrutura da tabela codigos_sequenciais:"
+          mysql -u root -p${DB_PASSWORD} -e "USE ${DB_NAME}; DESCRIBE codigos_sequenciais;"
+          echo ""
+          echo "📌 Dados de referência inseridos:"
+          mysql -u root -p${DB_PASSWORD} -e "USE ${DB_NAME}; SELECT * FROM codigos_sequenciais;"
+
+      # ════════════════════════════════════════════════
+      # ETAPA 5: Configurar ambiente Python
+      # ════════════════════════════════════════════════
+      - name: "🐍 Configurar Python 3.11"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "📦 Instalar dependências Python"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 5: Configuração do Python"
+          echo "══════════════════════════════════════════"
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          echo ""
+          echo "✅ Dependências instaladas:"
+          pip list | grep -E "mysql|pytest"
+
+      # ════════════════════════════════════════════════
+      # ETAPA 6: Verificar conexão Python ↔ MySQL
+      # ════════════════════════════════════════════════
+      - name: "🔌 Verificar conexão Python-MySQL"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 6: Teste de conexão Python-MySQL"
+          echo "══════════════════════════════════════════"
+          python << 'PYEOF'
+          import os, mysql.connector
+
+          conn = mysql.connector.connect(
+              host=os.environ["DB_HOST"],
+              port=int(os.environ["DB_PORT"]),
+              user=os.environ["DB_USER"],
+              password=os.environ["DB_PASSWORD"],
+              database=os.environ["DB_NAME"]
+          )
+
+          print(f"✅ Conexão estabelecida com sucesso!")
+          print(f"   MySQL Version : {conn.get_server_info()}")
+          print(f"   Host          : {os.environ['DB_HOST']}")
+          print(f"   Database      : {os.environ['DB_NAME']}")
+
+          cursor = conn.cursor(dictionary=True)
+          cursor.execute("SELECT COUNT(*) AS total FROM codigos_sequenciais")
+          result = cursor.fetchone()
+          print(f"   Registros     : {result['total']}")
+
+          cursor.close()
+          conn.close()
+          print("✅ Conexão encerrada com sucesso")
+          PYEOF
+
+      # ════════════════════════════════════════════════
+      # ETAPA 7: Executar testes automatizados
+      # ════════════════════════════════════════════════
+      - name: "🧪 Executar testes com pytest"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 7: Execução dos testes pytest"
+          echo "══════════════════════════════════════════"
+          pytest tests/ -v --tb=short -x
+
+      - name: "📊 Gerar relatório detalhado dos testes"
+        if: always()
+        run: |
+          pytest tests/ -v --tb=long --junitxml=test-results.xml || true
+          echo ""
+          echo "✅ Relatório de testes gerado: test-results.xml"
+
+      # ════════════════════════════════════════════════
+      # ETAPA 8: Upload dos artefatos
+      # ════════════════════════════════════════════════
+      - name: "📤 Upload dos resultados dos testes"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-testes
+          path: test-results.xml
+          retention-days: 30

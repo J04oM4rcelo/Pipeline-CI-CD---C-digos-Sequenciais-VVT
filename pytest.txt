@@ -1,0 +1,13 @@
+Modos de execução do pytest
+
+# Rodar todos os testes
+pytest tests/ -v
+
+# Rodar com detalhes de cada teste
+pytest tests/test_gerar_codigo.py -v --tb=short
+
+# Rodar uma classe específica
+pytest tests/test_gerar_codigo.py::TestGerarCodigo -v
+
+# Rodar um teste específico
+pytest tests/test_gerar_codigo.py::TestCalcularCodigoESec::test_grupo_vazio_gera_seq_1 -v
