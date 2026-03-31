@@ -59,39 +59,46 @@ jobs:
       # ════════════════════════════════════════════════
       # ETAPA 3: Instalação e configuração do MySQL
       # ════════════════════════════════════════════════
-      - name: "🗄️ Instalar e configurar MySQL Server"
+      - name: "🗄️ Instalar MySQL Server"
         run: |
           echo "══════════════════════════════════════════"
-          echo "  ETAPA 3: Instalação e Configuração MySQL"
+          echo "  ETAPA 3a: Instalação do MySQL Server"
           echo "══════════════════════════════════════════"
-
-          # Parar MySQL se já estiver rodando
-          sudo systemctl stop mysql || true
-
-          # Instalar MySQL
           sudo apt-get install -y mysql-server mysql-client
           echo "✅ MySQL instalado"
 
-          # Iniciar MySQL
+      - name: "⚙️ Iniciar e configurar MySQL"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 3b: Iniciar serviço MySQL"
+          echo "══════════════════════════════════════════"
           sudo systemctl start mysql
           sudo systemctl enable mysql
+          sudo systemctl status mysql --no-pager
+          echo ""
           echo "✅ MySQL em execução"
 
-          # Configurar credenciais usando sudo com mysql
-          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';"
-          sudo mysql -e "CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';"
-          sudo mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;"
-          sudo mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;"
-          sudo mysql -e "FLUSH PRIVILEGES;"
+      - name: "🔐 Configurar usuário e senha MySQL"
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  ETAPA 3c: Configurar credenciais MySQL"
+          echo "══════════════════════════════════════════"
+          sudo mysql << EOF
+          ALTER USER 'root'@'localhost'
+            IDENTIFIED WITH mysql_native_password
+            BY '${DB_PASSWORD}';
+          CREATE USER IF NOT EXISTS 'root'@'127.0.0.1'
+            IDENTIFIED WITH mysql_native_password
+            BY '${DB_PASSWORD}';
+          GRANT ALL PRIVILEGES ON *.*
+            TO 'root'@'127.0.0.1'
+            WITH GRANT OPTION;
+          FLUSH PRIVILEGES;
+          EOF
           echo "✅ Credenciais configuradas"
-
-          # Verificar
           echo ""
           echo "📌 Versão do MySQL:"
           mysql -u root -p${DB_PASSWORD} -e "SELECT VERSION() AS versao_mysql;"
-          echo ""
-          echo "📌 Status do serviço:"
-          sudo systemctl status mysql --no-pager | head -5
 
       # ════════════════════════════════════════════════
       # ETAPA 4: Criar banco de dados e tabela
